@@ -127,3 +127,6 @@ def show(signals, actions, inv):
             st.info("No rejected actions.")
         for action in rejected:
             render_action_card(action, "rejected")
+
+def render(data):
+    show(data)

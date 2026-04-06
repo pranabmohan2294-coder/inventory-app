@@ -67,3 +67,6 @@ def show(signals, returns, transit):
                     <small style="color:#8A9BC0">⚠️ Status unknown — recommendations for this route may be inaccurate. Contact logistics to confirm.</small>
                 </div>
                 """, unsafe_allow_html=True)
+
+def render(data):
+    show(data)

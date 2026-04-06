@@ -153,3 +153,6 @@ def show(inv, sales, signals, actions, skus):
                 "Confidence": a.confidence, "Status": state,
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+def render(data):
+    show(data)
