@@ -1,300 +1,194 @@
 import streamlit as st
+import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-import pandas as pd
 
-RISK_COLORS = {
-    "stockout": "#f85149",
-    "stockout_warning": "#e3b341",
-    "size_gap": "#f85149",
-    "overstock": "#58a6ff",
-    "dead_stock": "#8b949e",
-    "velocity_anomaly": "#bc8cff",
-    "returns_spike": "#e3b341",
-    "data_gap": "#8b949e",
-    "healthy": "#3fb950",
-}
-
-ACTION_LABELS = {
-    "transfer_store": "Transfer",
-    "replenish": "Replenish",
-    "markdown": "Markdown",
-    "wait": "Wait",
-    "investigate": "Investigate",
-    "hold_qc": "QC Hold",
-    "monitor": "Monitor",
-}
-
-
-def render(data):
-    summary      = data["summary"]
-    actions_df   = data["actions_df"]
-    store_health = data["store_health"]
-    risk_df      = data["risk_df"]
-    events       = data["events"]
-    today        = data["today"]
-
-    # ── PAGE HEADER ────────────────────────────────────────────────────────────
-    from datetime import datetime
-    day_str = datetime.now().strftime("%A, %d %B %Y")
+def show(inv, sales, transit, returns, signals, actions, summary, stores):
+    from datetime import date
+    today_str = date.today().strftime("%A, %d %B %Y")
 
     st.markdown(f"""
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;">
+    <div class="ginesys-header">
         <div>
-            <div class="page-title">Good morning 👋</div>
-            <div class="page-subtitle">{day_str} · Here's what needs your attention today</div>
-        </div>
-        <div style="text-align:right;font-size:11px;color:#8b949e;">
-            7 stores · 12 SKUs · {summary['total_sku_locations']} SKU-locations tracked
+            <h1>📦 Morning Briefing</h1>
+            <span>{today_str} · Network: 6 Stores · {len(inv['sku_id'].unique())} SKUs</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── EVENT BANNERS ──────────────────────────────────────────────────────────
-    for _, ev in events.iterrows():
-        days_away = (ev["start_date"] - today).days
-        if 0 <= days_away <= 14:
-            cats = ", ".join(ev["affected_categories"])
-            urgency_cls = "red" if days_away <= 3 else ""
+    # ── Anomaly Banner ──────────────────────────────────────────────────────────
+    anomalies = []
+    if summary["velocity_anomalies"] > 0:
+        anomalies.append(f"🔥 Demand spike on {summary['velocity_anomalies']} SKUs — sale event or trend shift?")
+    if summary["return_spikes"] > 0:
+        anomalies.append(f"⚠️ Returns spike detected at {summary['return_spikes']} locations — QC check needed")
+    if summary["data_gaps"] > 0:
+        anomalies.append(f"🔌 {summary['data_gaps']} in-transit shipments have unknown status — decisions may lag")
+
+    if anomalies:
+        for a in anomalies:
+            st.markdown(f'<div class="alert-banner">{a}</div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── KPI Cards ───────────────────────────────────────────────────────────────
+    cols = st.columns(4)
+    kpis = [
+        ("SKUs at Stockout Risk", summary["stockout_count"], "danger",
+         f"Highest urgency: {summary['top_risk_sku'][:25]}"),
+        ("Idle Overstock Value", f"₹{summary['overstock_value']:,}", "warning",
+         "Capital locked in slow-moving stock"),
+        ("Network Health Score", f"{summary['health_score']}%", "success" if summary['health_score'] > 70 else "warning",
+         "% SKUs in healthy DOH range"),
+        ("Pending Actions", summary["pending_actions"], "info",
+         "Actions awaiting your approval today"),
+    ]
+    for col, (label, val, cls, sub) in zip(cols, kpis):
+        with col:
             st.markdown(f"""
-            <div class="alert-banner {urgency_cls}">
-                🎯 <strong>{ev['event_name']}</strong> starts in {days_away} days —
-                {cats} demand expected {ev['expected_demand_multiplier']}x normal.
-                Pre-position stock now.
+            <div class="metric-card {cls}">
+                <div class="label">{label}</div>
+                <div class="value">{val}</div>
+                <div class="delta" style="color:#8A9BC0">{sub}</div>
             </div>
             """, unsafe_allow_html=True)
 
-    # Anomaly banners
-    anomaly_skus = risk_df[risk_df["velocity_anomaly"] == True]
-    if not anomaly_skus.empty:
-        sku_list = anomaly_skus["sku_name"].unique()[:3]
-        st.markdown(f"""
-        <div class="alert-banner">
-            📈 Velocity spike on <strong>{", ".join(sku_list)}</strong> — unusual demand detected.
-            Confirm if a sale event is running.
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── KPI CARDS ──────────────────────────────────────────────────────────────
-    col1, col2, col3, col4 = st.columns(4)
+    # ── Top 5 Priority Actions + Store Health ───────────────────────────────────
+    col_l, col_r = st.columns([1.1, 0.9])
 
-    with col1:
-        st.markdown(f"""
-        <div class="kpi-card red">
-            <div class="kpi-label">🔴 Critical Stockouts</div>
-            <div class="kpi-value">{summary['stockout_critical_count']}</div>
-            <div class="kpi-sub">+{summary['stockout_warning_count']} at warning level</div>
-        </div>
-        """, unsafe_allow_html=True)
+    with col_l:
+        st.markdown("#### ⚡ Top 5 Actions Today")
+        st.markdown("<small style='color:#8A9BC0'>Approve directly here or go to Action Feed for full detail</small>", unsafe_allow_html=True)
+        top5 = [a for a in actions if a.status == "Pending"][:5]
 
-    with col2:
-        ov_cr = f"₹{summary['overstock_value']/100000:.1f}L"
-        st.markdown(f"""
-        <div class="kpi-card blue">
-            <div class="kpi-label">📦 Overstock Value</div>
-            <div class="kpi-value">{ov_cr}</div>
-            <div class="kpi-sub">{summary['overstock_count']} SKU-locations idle</div>
-        </div>
-        """, unsafe_allow_html=True)
+        if not top5:
+            st.success("✅ All critical actions resolved. Great work!")
+        else:
+            for action in top5:
+                state = st.session_state.action_states.get(action.action_id, "Pending")
+                risk_colors = {
+                    "stockout": "#FF4444", "size_gap": "#FFD700",
+                    "imbalance": "#4488FF", "overstock": "#FF8C00",
+                    "dead_stock": "#888888",
+                }
+                risk_color = risk_colors.get(action.risk_type, "#F26522")
+                badge_map = {
+                    "TRANSFER": "badge-transfer", "MARKDOWN": "badge-markdown",
+                    "REPLENISH": "badge-replenish", "WAIT": "badge-wait"
+                }
+                conf_map = {"High": "badge-high", "Medium": "badge-medium", "Low": "badge-low"}
 
-    with col3:
-        health_color = "#f85149" if summary['network_health_pct'] < 60 else ("#e3b341" if summary['network_health_pct'] < 80 else "#3fb950")
-        st.markdown(f"""
-        <div class="kpi-card green">
-            <div class="kpi-label">💚 Network Health</div>
-            <div class="kpi-value" style="color:{health_color};">{summary['network_health_pct']}%</div>
-            <div class="kpi-sub">SKUs in healthy DOH range</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col4:
-        st.markdown(f"""
-        <div class="kpi-card amber">
-            <div class="kpi-label">⚡ Actions Needed</div>
-            <div class="kpi-value">{summary['critical_actions']}</div>
-            <div class="kpi-sub">{summary['pending_actions']} total · {summary['data_gap_count']} data gaps</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-
-    # ── TOP ACTIONS + STORE HEALTH SPLIT ──────────────────────────────────────
-    left_col, right_col = st.columns([6, 4], gap="large")
-
-    with left_col:
-        st.markdown("<div class='section-header'>Top 5 Actions · Approve Right Here</div>", unsafe_allow_html=True)
-
-        if actions_df is not None and not actions_df.empty:
-            top5 = actions_df.head(5)
-
-            for idx, row in top5.iterrows():
-                action_key = f"{row['sku_id']}_{row['size']}_{row['store_id']}"
-                is_approved = action_key in st.session_state.approved_actions
-                is_rejected = action_key in st.session_state.rejected_actions
-
-                sev = row.get("risk_severity", "warning")
-                sev_class = "critical" if sev == "critical" else "warning"
-
-                risk_badge = {
-                    "stockout": '<span class="badge badge-red">Stockout</span>',
-                    "stockout_warning": '<span class="badge badge-amber">At Risk</span>',
-                    "size_gap": '<span class="badge badge-red">Size Gap</span>',
-                    "overstock": '<span class="badge badge-blue">Overstock</span>',
-                    "dead_stock": '<span class="badge badge-grey">Dead Stock</span>',
-                    "velocity_anomaly": '<span class="badge badge-blue">Velocity Spike</span>',
-                    "returns_spike": '<span class="badge badge-amber">Returns Spike</span>',
-                    "data_gap": '<span class="badge badge-grey">Data Gap</span>',
-                }.get(row["risk_type"], "")
-
-                conf_badge = {
-                    "high": '<span class="badge badge-green">High Confidence</span>',
-                    "medium": '<span class="badge badge-amber">Medium Confidence</span>',
-                    "low": '<span class="badge badge-grey">Low Confidence</span>',
-                }.get(row.get("confidence", "medium"), "")
-
-                prevented = f"₹{row.get('prevented_loss', 0):,.0f}" if row.get("prevented_loss", 0) > 0 else "—"
-                action_label = ACTION_LABELS.get(row.get("recommended_action", ""), row.get("recommended_action", ""))
-
-                status_indicator = ""
-                if is_approved:
-                    status_indicator = '<span style="color:#3fb950;font-size:12px;font-weight:600;">✓ Approved</span>'
-                elif is_rejected:
-                    status_indicator = '<span style="color:#8b949e;font-size:12px;">✗ Rejected</span>'
+                border = {"Approved": "#22C55E", "Rejected": "#FF4444"}.get(state, risk_color)
+                opacity = "opacity:0.6;" if state != "Pending" else ""
 
                 st.markdown(f"""
-                <div class="action-card {sev_class}">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                <div class="action-card" style="border-left-color:{border}; {opacity}">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                         <div>
-                            <span style="font-size:14px;font-weight:600;color:#f0f6fc;">{row['sku_name']}</span>
-                            <span style="font-size:12px;color:#8b949e;margin-left:8px;">Size {row['size']} · {row['store_name']}</span>
+                            <b style="color:#E8EDF5">{action.sku_name}</b> &nbsp;
+                            <span class="badge {badge_map.get(action.action_type,'badge-transfer')}">{action.action_type}</span>
+                            <span class="badge {conf_map.get(action.confidence,'badge-medium')}">{action.confidence}</span><br>
+                            <small style="color:#8A9BC0">Size: {action.size} · {action.from_location} → {action.to_location}</small><br>
+                            <small style="color:#8A9BC0">Qty: {action.quantity} · ₹{int(action.cost_inr):,} cost · Saves ₹{int(action.prevented_loss_inr):,}</small>
                         </div>
-                        <div style="display:flex;gap:6px;align-items:center;">
-                            {risk_badge} {conf_badge} {status_indicator}
+                        <div style="text-align:right; min-width:80px;">
+                            <div style="font-size:11px; color:#8A9BC0">Priority</div>
+                            <div style="font-size:18px; font-weight:700; color:{risk_color}">{action.priority_score:.1f}</div>
                         </div>
                     </div>
-                    <div style="font-size:13px;color:#c9d1d9;margin-bottom:8px;">
-                        <strong style="color:#58a6ff;">{action_label}:</strong> {row.get('action_detail', '—')}
-                        <span style="color:#8b949e;margin-left:12px;">DOH: {row.get('current_doh', '—')}d</span>
-                        <span style="color:#3fb950;margin-left:12px;">Save: {prevented}</span>
-                    </div>
-                    <div style="font-size:11px;color:#8b949e;">{row.get('reason', '')}</div>
+                    <div style="font-size:12px; color:#8A9BC0; margin-top:6px;">💡 {action.notes}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                if not is_approved and not is_rejected:
-                    btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 6])
-                    with btn_col1:
-                        if st.button("✓ Approve", key=f"approve_brief_{action_key}", type="primary"):
-                            st.session_state.approved_actions.add(action_key)
+                if state == "Pending":
+                    b1, b2, b3 = st.columns([1, 1, 3])
+                    with b1:
+                        if st.button("✅ Approve", key=f"mb_app_{action.action_id}"):
+                            st.session_state.action_states[action.action_id] = "Approved"
                             st.rerun()
-                    with btn_col2:
-                        if st.button("✗ Reject", key=f"reject_brief_{action_key}"):
-                            st.session_state.rejected_actions.add(action_key)
+                    with b2:
+                        if st.button("❌ Reject", key=f"mb_rej_{action.action_id}"):
+                            st.session_state.action_states[action.action_id] = "Rejected"
                             st.rerun()
+                else:
+                    st.markdown(f"<div style='color:#8A9BC0; font-size:12px; padding: 2px 0 8px;'>Status: <b>{state}</b></div>", unsafe_allow_html=True)
 
-            if len(actions_df) > 5:
-                st.markdown(f"""
-                <div style="text-align:center;padding:12px;color:#8b949e;font-size:12px;border:1px dashed #1e2130;border-radius:8px;margin-top:8px;">
-                    +{len(actions_df) - 5} more actions in the Action Feed →
-                </div>
-                """, unsafe_allow_html=True)
+    with col_r:
+        st.markdown("#### 🏪 Store Health At a Glance")
+        store_signals = signals[signals["store_id"] != "WH"].copy()
+        store_health = []
+        for store_id in store_signals["store_id"].unique():
+            s_df = store_signals[store_signals["store_id"] == store_id]
+            total = len(s_df)
+            stockouts = len(s_df[s_df["risk_type"] == "stockout"])
+            overstocked = len(s_df[s_df["risk_type"].isin(["overstock", "dead_stock"])])
+            healthy = total - stockouts - overstocked
+            health_pct = round(healthy / total * 100) if total > 0 else 0
+            store_name = s_df.iloc[0]["store_name"] if len(s_df) > 0 else store_id
+            tier = s_df.iloc[0]["store_tier"] if len(s_df) > 0 else "B"
+            store_health.append({
+                "store_id": store_id, "store_name": store_name, "tier": tier,
+                "health_pct": health_pct, "stockouts": stockouts,
+                "overstocked": overstocked, "total_skus": total,
+            })
 
-    with right_col:
-        st.markdown("<div class='section-header'>Store Health Overview</div>", unsafe_allow_html=True)
+        sh_df = pd.DataFrame(store_health).sort_values("health_pct")
 
-        for _, store in store_health.iterrows():
-            pct = store["health_pct"]
-            bar_color = "#f85149" if pct < 50 else ("#e3b341" if pct < 75 else "#3fb950")
-            tier_badge = f'<span class="badge badge-{"blue" if store["tier"]=="A" else ("green" if store["tier"]=="B" else "grey")}">Tier {store["tier"]}</span>'
+        fig = go.Figure()
+        colors = ["#FF4444" if h < 50 else "#F26522" if h < 75 else "#22C55E"
+                  for h in sh_df["health_pct"]]
+        fig.add_trace(go.Bar(
+            x=sh_df["health_pct"], y=sh_df["store_name"],
+            orientation="h", marker_color=colors,
+            text=[f"{h}%" for h in sh_df["health_pct"]],
+            textposition="outside",
+            customdata=sh_df[["stockouts", "overstocked", "tier"]].values,
+            hovertemplate="<b>%{y}</b><br>Health: %{x}%<br>Stockouts: %{customdata[0]}<br>Overstock: %{customdata[1]}<br>Tier: %{customdata[2]}<extra></extra>",
+        ))
+        fig.update_layout(
+            plot_bgcolor="#0F2040", paper_bgcolor="#0F2040",
+            font_color="#E8EDF5", margin=dict(l=0, r=40, t=10, b=10),
+            xaxis=dict(range=[0, 115], showgrid=False, zeroline=False, color="#8A9BC0"),
+            yaxis=dict(showgrid=False, color="#E8EDF5"),
+            height=300,
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
+        # Wins panel
+        approved_count = sum(1 for v in st.session_state.action_states.values() if v == "Approved")
+        if approved_count > 0:
             st.markdown(f"""
-            <div style="margin-bottom:14px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                    <div>
-                        <span style="font-size:13px;font-weight:600;color:#f0f6fc;">{store['store_name']}</span>
-                        <span style="font-size:11px;color:#8b949e;margin-left:6px;">{store['city']}</span>
-                        {tier_badge}
-                    </div>
-                    <div style="font-size:12px;font-weight:600;color:{bar_color};font-family:'DM Mono',monospace;">{pct}%</div>
-                </div>
-                <div style="background:#1e2130;border-radius:4px;height:6px;overflow:hidden;">
-                    <div style="background:{bar_color};height:100%;width:{pct}%;border-radius:4px;transition:width 0.3s;"></div>
-                </div>
-                <div style="display:flex;gap:12px;margin-top:4px;font-size:11px;color:#8b949e;">
-                    <span style="color:#f85149;">🔴 {store['critical_count']} critical</span>
-                    <span style="color:#e3b341;">🟡 {store['warning_count']} warning</span>
-                    <span style="color:#3fb950;">✓ {store['healthy_count']} healthy</span>
+            <div style="background:#0A2010; border:1px solid #22C55E33; border-radius:8px; padding:12px; margin-top:12px;">
+                <div style="color:#22C55E; font-weight:600; font-size:13px;">✅ Session Wins</div>
+                <div style="color:#8A9BC0; font-size:12px; margin-top:4px;">
+                {approved_count} action(s) approved this session
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-    # ── DOH DISTRIBUTION CHART ─────────────────────────────────────────────────
-    st.markdown("<div class='section-header'>DOH Distribution Across Network</div>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    risk_df_clean = risk_df[risk_df["doh"] < 200].copy()
-    risk_df_clean["doh_bucket"] = pd.cut(
-        risk_df_clean["doh"],
-        bins=[0, 3, 7, 15, 30, 60, 200],
-        labels=["Critical (0–3d)", "At Risk (3–7d)", "Watch (7–15d)", "Healthy (15–30d)", "Surplus (30–60d)", "Overstock (60d+)"]
-    )
-    dist = risk_df_clean.groupby("doh_bucket", observed=True).size().reset_index(name="count")
+    # ── DOH Distribution ────────────────────────────────────────────────────────
+    st.markdown("#### 📊 Network DOH Distribution")
+    store_only = signals[signals["store_id"] != "WH"].copy()
+    bins = pd.cut(store_only["doh"], bins=[0, 3, 7, 15, 30, 999],
+                  labels=["Critical (0-3d)", "Low (3-7d)", "Healthy (7-15d)", "Good (15-30d)", "Overstock (30d+)"])
+    dist = bins.value_counts().reindex(["Critical (0-3d)", "Low (3-7d)", "Healthy (7-15d)", "Good (15-30d)", "Overstock (30d+)"])
+    colors_doh = ["#FF4444", "#F26522", "#22C55E", "#4488FF", "#888888"]
 
-    colors_map = {
-        "Critical (0–3d)": "#f85149",
-        "At Risk (3–7d)": "#e3b341",
-        "Watch (7–15d)": "#bc8cff",
-        "Healthy (15–30d)": "#3fb950",
-        "Surplus (30–60d)": "#58a6ff",
-        "Overstock (60d+)": "#8b949e",
-    }
-
-    fig = go.Figure(go.Bar(
-        x=dist["doh_bucket"].astype(str),
-        y=dist["count"],
-        marker_color=[colors_map.get(str(b), "#8b949e") for b in dist["doh_bucket"]],
-        marker_line_width=0,
-        text=dist["count"],
-        textposition="outside",
-        textfont=dict(color="#c9d1d9", size=11, family="DM Mono"),
+    fig2 = go.Figure(go.Bar(
+        x=dist.index, y=dist.values,
+        marker_color=colors_doh,
+        text=dist.values, textposition="outside",
+        hovertemplate="%{x}: %{y} SKU×Store combinations<extra></extra>",
     ))
-    fig.update_layout(
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
+    fig2.update_layout(
+        plot_bgcolor="#0F2040", paper_bgcolor="#0F2040",
+        font_color="#E8EDF5", margin=dict(l=0, r=0, t=10, b=10),
+        xaxis=dict(showgrid=False, color="#8A9BC0"),
+        yaxis=dict(showgrid=True, gridcolor="#1A3060", color="#8A9BC0"),
         height=220,
-        margin=dict(l=0, r=0, t=10, b=0),
-        xaxis=dict(
-            tickfont=dict(color="#8b949e", size=11, family="DM Sans"),
-            gridcolor="rgba(0,0,0,0)",
-            showline=False,
-        ),
-        yaxis=dict(
-            tickfont=dict(color="#8b949e", size=11),
-            gridcolor="#1e2130",
-            showline=False,
-            title=None,
-        ),
-        bargap=0.3,
-        showlegend=False,
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
-    # ── WINS PANEL ─────────────────────────────────────────────────────────────
-    approved_count = len(st.session_state.approved_actions)
-    if approved_count > 0:
-        st.markdown("<div class='section-header'>Today's Wins</div>", unsafe_allow_html=True)
-        approved_actions = actions_df[
-            actions_df.apply(lambda r: f"{r['sku_id']}_{r['size']}_{r['store_id']}" in st.session_state.approved_actions, axis=1)
-        ]
-        total_prevented = approved_actions["prevented_loss"].sum()
-        st.markdown(f"""
-        <div style="display:flex;gap:16px;">
-            <div class="kpi-card green" style="flex:1;">
-                <div class="kpi-label">Actions Approved</div>
-                <div class="kpi-value">{approved_count}</div>
-            </div>
-            <div class="kpi-card green" style="flex:1;">
-                <div class="kpi-label">Revenue Protected</div>
-                <div class="kpi-value" style="font-size:24px;">₹{total_prevented/1000:.0f}K</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    st.plotly_chart(fig2, use_container_width=True)

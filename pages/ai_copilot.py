@@ -135,14 +135,14 @@ def render(data):
 
         # Show demo mode
         st.markdown("""
-        <div style="background:#0f1117;border:1px solid #1e2130;border-radius:12px;padding:20px 24px;margin-top:16px;">
-            <div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:12px;">💡 What you can ask the copilot:</div>
+        <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:12px;padding:20px 24px;margin-top:16px;">
+            <div style="font-size:14px;font-weight:600;color:#1B2B5E;margin-bottom:12px;">💡 What you can ask the copilot:</div>
         </div>
         """, unsafe_allow_html=True)
 
         for q in SUGGESTED_QUESTIONS:
             st.markdown(f"""
-            <div style="background:#0d1117;border:1px solid #1e2130;border-radius:8px;padding:10px 16px;margin-bottom:8px;font-size:13px;color:#c9d1d9;">
+            <div style="background:#F4F6FB;border:1px solid #E2E8F0;border-radius:8px;padding:10px 16px;margin-bottom:8px;font-size:13px;color:#475569;">
                 💬 "{q}"
             </div>
             """, unsafe_allow_html=True)
@@ -170,9 +170,9 @@ def render(data):
         with chat_container:
             if not st.session_state.chat_history:
                 st.markdown("""
-                <div style="text-align:center;padding:48px 24px;color:#8b949e;">
+                <div style="text-align:center;padding:48px 24px;color:#64748B;">
                     <div style="font-size:32px;margin-bottom:12px;">🤖</div>
-                    <div style="font-size:16px;font-weight:600;color:#f0f6fc;margin-bottom:8px;">Inventory Copilot Ready</div>
+                    <div style="font-size:16px;font-weight:600;color:#1B2B5E;margin-bottom:8px;">Inventory Copilot Ready</div>
                     <div style="font-size:13px;">Ask me anything about your network — stockouts, transfers, markdowns, Diwali prep.</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -181,7 +181,7 @@ def render(data):
                     if msg["role"] == "user":
                         st.markdown(f"""
                         <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
-                            <div style="background:#1c2433;border:1px solid #30363d;border-radius:12px 12px 2px 12px;padding:12px 16px;max-width:75%;font-size:13px;color:#f0f6fc;">
+                            <div style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:12px 12px 2px 12px;padding:12px 16px;max-width:75%;font-size:13px;color:#1B2B5E;">
                                 {msg['content']}
                             </div>
                         </div>
@@ -190,7 +190,7 @@ def render(data):
                         st.markdown(f"""
                         <div style="display:flex;justify-content:flex-start;margin-bottom:12px;">
                             <div style="margin-right:8px;font-size:18px;margin-top:4px;">🤖</div>
-                            <div style="background:#0f1117;border:1px solid #1e2130;border-radius:2px 12px 12px 12px;padding:12px 16px;max-width:85%;font-size:13px;color:#c9d1d9;line-height:1.6;">
+                            <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:2px 12px 12px 12px;padding:12px 16px;max-width:85%;font-size:13px;color:#475569;line-height:1.6;">
                                 {msg['content'].replace(chr(10), '<br>')}
                             </div>
                         </div>
