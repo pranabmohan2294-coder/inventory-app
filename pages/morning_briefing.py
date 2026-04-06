@@ -192,3 +192,6 @@ def show(inv, sales, transit, returns, signals, actions, summary, stores):
         height=220,
     )
     st.plotly_chart(fig2, use_container_width=True)
+
+def render(data):
+    show(data)
