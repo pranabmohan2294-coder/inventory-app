@@ -53,6 +53,19 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif !important; }
 </style>
 """, unsafe_allow_html=True)
 
+
+# Force sidebar always visible
+st.markdown("""
+<script>
+window.addEventListener('load', function() {
+    setTimeout(function() {
+        var btn = document.querySelector('[data-testid="collapsedControl"]');
+        if (btn) btn.click();
+    }, 500);
+});
+</script>
+""", unsafe_allow_html=True)
+
 @st.cache_data(ttl=300)
 def get_data():
     raw = load_all_data()
