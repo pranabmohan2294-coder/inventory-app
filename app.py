@@ -22,7 +22,7 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif !important; }
 [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.12) !important; }
 [data-testid="collapsedControl"] { display: flex !important; visibility: visible !important; opacity: 1 !important; background: #1B2B5E !important; border-radius: 0 8px 8px 0 !important; top: 14px !important; z-index: 9999 !important; border: 1px solid rgba(244,121,32,0.4) !important; border-left: none !important; }
 [data-testid="collapsedControl"] svg { fill: #F47920 !important; }
-#MainMenu, footer, header { visibility: hidden; }
+#MainMenu, footer { visibility: hidden; }
 .kpi-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px 24px; position: relative; overflow: hidden; box-shadow: 0 1px 4px rgba(27,43,94,0.06); }
 .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
 .kpi-card.red::before { background: #DC2626; } .kpi-card.amber::before { background: #F47920; }
