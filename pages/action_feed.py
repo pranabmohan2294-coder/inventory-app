@@ -45,10 +45,10 @@ def render(data):
 
     c1, c2, c3, c4 = st.columns(4)
     for col, label, val, color in [
-        (c1, "Total Actions", total, "#8b949e"),
-        (c2, "Critical", critical, "#f85149"),
-        (c3, "Approved", approved, "#3fb950"),
-        (c4, "Pending", pending, "#e3b341"),
+        (c1, "Total Actions", total, "#64748B"),
+        (c2, "Critical", critical, "#DC2626"),
+        (c3, "Approved", approved, "#16A34A"),
+        (c4, "Pending", pending, "#F47920"),
     ]:
         with col:
             st.markdown(f"""
@@ -92,7 +92,7 @@ def render(data):
     elif status_filter == "Rejected":
         df = df[df.apply(lambda r: f"{r['sku_id']}_{r['size']}_{r['store_id']}" in st.session_state.rejected_actions, axis=1)]
 
-    st.markdown(f"<div style='font-size:12px;color:#8b949e;margin:12px 0 8px 0;'>{len(df)} actions shown</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:12px;color:#64748B;margin:12px 0 8px 0;'>{len(df)} actions shown</div>", unsafe_allow_html=True)
 
     # ── ACTION CARDS ──────────────────────────────────────────────────────────
     for idx, row in df.iterrows():
@@ -101,17 +101,17 @@ def render(data):
         is_rejected = action_key in st.session_state.rejected_actions
 
         sev = row.get("risk_severity", "warning")
-        border_color = "#f85149" if sev == "critical" else "#e3b341"
+        border_color = "#DC2626" if sev == "critical" else "#F47920"
         if is_approved:
-            border_color = "#3fb950"
+            border_color = "#16A34A"
         elif is_rejected:
-            border_color = "#484f58"
+            border_color = "#94A3B8"
 
         risk_label = RISK_LABELS.get(row["risk_type"], row["risk_type"])
         action_label = ACTION_LABELS.get(row.get("recommended_action", ""), row.get("recommended_action", ""))
 
         conf = row.get("confidence", "medium")
-        conf_color = {"high": "#3fb950", "medium": "#e3b341", "low": "#f85149"}.get(conf, "#8b949e")
+        conf_color = {"high": "#16A34A", "medium": "#F47920", "low": "#DC2626"}.get(conf, "#64748B")
         conf_label = {"high": "High", "medium": "Med", "low": "Low"}.get(conf, conf)
 
         prevented = f"₹{row.get('prevented_loss', 0):,.0f}" if row.get("prevented_loss", 0) > 0 else "—"
@@ -132,30 +132,30 @@ def render(data):
             col_a, col_b, col_c = st.columns(3)
             with col_a:
                 st.markdown(f"""
-                <div style="font-size:11px;color:#8b949e;margin-bottom:2px;">FROM → TO</div>
-                <div style="font-size:13px;color:#f0f6fc;font-weight:600;">
+                <div style="font-size:11px;color:#64748B;margin-bottom:2px;">FROM → TO</div>
+                <div style="font-size:13px;color:#1B2B5E;font-weight:600;">
                     {row.get('from_location', '—')} → {row.get('to_location', '—')}
                 </div>
-                <div style="font-size:11px;color:#8b949e;margin-top:8px;">Quantity</div>
-                <div style="font-size:13px;color:#f0f6fc;">{row.get('transfer_qty', 0)} units · {row.get('mode', '—')} · ETA {eta}</div>
+                <div style="font-size:11px;color:#64748B;margin-top:8px;">Quantity</div>
+                <div style="font-size:13px;color:#1B2B5E;">{row.get('transfer_qty', 0)} units · {row.get('mode', '—')} · ETA {eta}</div>
                 """, unsafe_allow_html=True)
             with col_b:
                 st.markdown(f"""
-                <div style="font-size:11px;color:#8b949e;margin-bottom:2px;">FINANCIALS</div>
-                <div style="font-size:13px;color:#3fb950;font-weight:600;">Save: {prevented}</div>
-                <div style="font-size:11px;color:#8b949e;margin-top:4px;">Cost: {cost}</div>
-                <div style="font-size:11px;color:#8b949e;">DOH: {row.get('current_doh', '—')}d current</div>
+                <div style="font-size:11px;color:#64748B;margin-bottom:2px;">FINANCIALS</div>
+                <div style="font-size:13px;color:#16A34A;font-weight:600;">Save: {prevented}</div>
+                <div style="font-size:11px;color:#64748B;margin-top:4px;">Cost: {cost}</div>
+                <div style="font-size:11px;color:#64748B;">DOH: {row.get('current_doh', '—')}d current</div>
                 """, unsafe_allow_html=True)
             with col_c:
                 st.markdown(f"""
-                <div style="font-size:11px;color:#8b949e;margin-bottom:2px;">SIGNALS</div>
+                <div style="font-size:11px;color:#64748B;margin-bottom:2px;">SIGNALS</div>
                 <div style="font-size:12px;color:{conf_color};font-weight:600;">Confidence: {conf_label}</div>
-                <div style="font-size:11px;color:#8b949e;margin-top:4px;">Priority: {row.get('priority_score', 0):.0f}/100</div>
-                <div style="font-size:11px;color:#8b949e;">Velocity: {row.get('daily_velocity', 0):.1f} units/day</div>
+                <div style="font-size:11px;color:#64748B;margin-top:4px;">Priority: {row.get('priority_score', 0):.0f}/100</div>
+                <div style="font-size:11px;color:#64748B;">Velocity: {row.get('daily_velocity', 0):.1f} units/day</div>
                 """, unsafe_allow_html=True)
 
             st.markdown(f"""
-            <div style="background:#0d1117;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:12px;color:#c9d1d9;border:1px solid #1e2130;">
+            <div style="background:#F4F6FB;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:12px;color:#475569;border:1px solid #E2E8F0;">
                 💡 <strong>Why:</strong> {row.get('reason', '—')}
             </div>
             """, unsafe_allow_html=True)
@@ -163,18 +163,18 @@ def render(data):
             # Transfer vs Markdown comparison for overstock
             if row.get("recommended_action") == "markdown" and row.get("effective_stock", 0) > 0:
                 st.markdown(f"""
-                <div style="background:#0d1117;border-radius:6px;padding:12px;margin-bottom:12px;border:1px solid #1e2130;">
-                    <div style="font-size:11px;font-weight:700;color:#8b949e;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Markdown vs Hold Comparison</div>
+                <div style="background:#F4F6FB;border-radius:6px;padding:12px;margin-bottom:12px;border:1px solid #E2E8F0;">
+                    <div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Markdown vs Hold Comparison</div>
                     <div style="display:flex;gap:24px;font-size:12px;">
                         <div>
-                            <div style="color:#e3b341;font-weight:600;">30% Markdown Now</div>
-                            <div style="color:#8b949e;margin-top:4px;">Revenue: ₹{row.get('effective_stock',0) * row.get('mrp',0) * 0.7:,.0f}</div>
-                            <div style="color:#f85149;">Loss: ₹{row.get('markdown_loss',0):,.0f}</div>
+                            <div style="color:#F47920;font-weight:600;">30% Markdown Now</div>
+                            <div style="color:#64748B;margin-top:4px;">Revenue: ₹{row.get('effective_stock',0) * row.get('mrp',0) * 0.7:,.0f}</div>
+                            <div style="color:#DC2626;">Loss: ₹{row.get('markdown_loss',0):,.0f}</div>
                         </div>
                         <div>
-                            <div style="color:#f85149;font-weight:600;">Hold (risk)</div>
-                            <div style="color:#8b949e;margin-top:4px;">Capital tied: ₹{row.get('effective_stock',0) * row.get('mrp',0):,.0f}</div>
-                            <div style="color:#f85149;">Aging cost grows daily</div>
+                            <div style="color:#DC2626;font-weight:600;">Hold (risk)</div>
+                            <div style="color:#64748B;margin-top:4px;">Capital tied: ₹{row.get('effective_stock',0) * row.get('mrp',0):,.0f}</div>
+                            <div style="color:#DC2626;">Aging cost grows daily</div>
                         </div>
                     </div>
                 </div>

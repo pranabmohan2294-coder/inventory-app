@@ -24,15 +24,15 @@ def render(data):
 
     # ── SKU META HEADER ───────────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="background:#0f1117;border:1px solid #1e2130;border-radius:12px;padding:16px 24px;margin:12px 0 20px 0;">
+    <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:12px;padding:16px 24px;margin:12px 0 20px 0;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
             <div>
-                <div style="font-size:18px;font-weight:700;color:#f0f6fc;">{selected_sku_name}</div>
-                <div style="font-size:12px;color:#8b949e;margin-top:4px;">
+                <div style="font-size:18px;font-weight:700;color:#1B2B5E;">{selected_sku_name}</div>
+                <div style="font-size:12px;color:#64748B;margin-top:4px;">
                     {sku_meta['category']} · SKU {selected_sku_id} · MRP ₹{sku_meta['mrp']:,}
                 </div>
             </div>
-            <div style="text-align:right;font-size:12px;color:#8b949e;">
+            <div style="text-align:right;font-size:12px;color:#64748B;">
                 {len(risk_df[risk_df['sku_id'] == selected_sku_id])} store-size combinations tracked
             </div>
         </div>
@@ -66,7 +66,7 @@ def render(data):
         x=daily_sales["date"],
         y=daily_sales["doh_estimate"],
         mode="lines",
-        line=dict(color="#58a6ff", width=2.5, shape="spline"),
+        line=dict(color="#2563EB", width=2.5, shape="spline"),
         fill="tozeroy",
         fillcolor="rgba(88,166,255,0.08)",
         name="DOH (network avg)",
@@ -74,15 +74,15 @@ def render(data):
     ))
 
     # Today marker
-    fig.add_vline(x=str(daily_sales["date"].max()), line_dash="dash", line_color="#8b949e", line_width=1)
+    fig.add_vline(x=str(daily_sales["date"].max()), line_dash="dash", line_color="#64748B", line_width=1)
 
     fig.update_layout(
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         height=260,
         margin=dict(l=0, r=60, t=10, b=0),
-        xaxis=dict(tickfont=dict(color="#8b949e", size=11), gridcolor="#1e2130", showline=False),
-        yaxis=dict(tickfont=dict(color="#8b949e", size=11), gridcolor="#1e2130", showline=False, title="Days on Hand"),
+        xaxis=dict(tickfont=dict(color="#64748B", size=11), gridcolor="#E2E8F0", showline=False),
+        yaxis=dict(tickfont=dict(color="#64748B", size=11), gridcolor="#E2E8F0", showline=False, title="Days on Hand"),
         showlegend=False,
         hovermode="x unified",
     )
@@ -104,7 +104,7 @@ def render(data):
     size_rows = []
     for _, s in size_summary.iterrows():
         doh_val = s["avg_doh"]
-        doh_color = "#f85149" if doh_val < 3 else ("#e3b341" if doh_val < 7 else ("#3fb950" if doh_val < 30 else "#8b949e"))
+        doh_color = "#DC2626" if doh_val < 3 else ("#F47920" if doh_val < 7 else ("#16A34A" if doh_val < 30 else "#64748B"))
         pivotal_tag = " 🎯" if s["is_pivotal"] else ""
         size_rows.append({
             "Size": f"{s['size']}{pivotal_tag}",
@@ -123,7 +123,7 @@ def render(data):
 
     # Size DOH bar chart
     fig2 = go.Figure()
-    colors = ["#f85149" if d < 3 else ("#e3b341" if d < 7 else ("#3fb950" if d < 30 else "#8b949e"))
+    colors = ["#DC2626" if d < 3 else ("#F47920" if d < 7 else ("#16A34A" if d < 30 else "#64748B"))
               for d in size_summary["avg_doh"].clip(upper=60)]
     fig2.add_trace(go.Bar(
         x=size_summary["size"],
@@ -132,19 +132,19 @@ def render(data):
         marker_line_width=0,
         text=size_summary["avg_doh_display"],
         textposition="outside",
-        textfont=dict(color="#c9d1d9", size=11),
+        textfont=dict(color="#475569", size=11),
     ))
-    fig2.add_hline(y=7, line_dash="dash", line_color="#e3b341", line_width=1, annotation_text="Warning threshold")
-    fig2.add_hline(y=3, line_dash="dash", line_color="#f85149", line_width=1, annotation_text="Critical threshold")
+    fig2.add_hline(y=7, line_dash="dash", line_color="#F47920", line_width=1, annotation_text="Warning threshold")
+    fig2.add_hline(y=3, line_dash="dash", line_color="#DC2626", line_width=1, annotation_text="Critical threshold")
     fig2.update_layout(
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
         height=220,
         margin=dict(l=0, r=0, t=10, b=0),
-        xaxis=dict(tickfont=dict(color="#8b949e", size=12), showgrid=False),
-        yaxis=dict(tickfont=dict(color="#8b949e", size=11), gridcolor="#1e2130", title="Avg DOH (days)"),
+        xaxis=dict(tickfont=dict(color="#64748B", size=12), showgrid=False),
+        yaxis=dict(tickfont=dict(color="#64748B", size=11), gridcolor="#E2E8F0", title="Avg DOH (days)"),
         showlegend=False,
-        title=dict(text="Average DOH by Size", font=dict(color="#8b949e", size=12)),
+        title=dict(text="Average DOH by Size", font=dict(color="#64748B", size=12)),
     )
     st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
@@ -164,7 +164,7 @@ def render(data):
 
     for _, s in store_summary.iterrows():
         doh = s["avg_doh"]
-        doh_color = "#f85149" if doh < 3 else ("#e3b341" if doh < 7 else ("#3fb950" if doh < 30 else "#8b949e"))
+        doh_color = "#DC2626" if doh < 3 else ("#F47920" if doh < 7 else ("#16A34A" if doh < 30 else "#64748B"))
         tier_color = "blue" if s["tier"] == "A" else ("green" if s["tier"] == "B" else "grey")
         risks = [r for r in s["risk_types"] if r != "healthy"]
         risk_pills = " ".join([f'<span class="badge badge-{"red" if r in ("stockout","size_gap") else "amber"}">{r.replace("_"," ")}</span>' for r in risks[:2]])
@@ -173,26 +173,26 @@ def render(data):
         with col_l:
             st.markdown(f"""
             <div style="padding:4px 0;">
-                <span style="font-size:13px;font-weight:600;color:#f0f6fc;">{s['store_name']}</span>
+                <span style="font-size:13px;font-weight:600;color:#1B2B5E;">{s['store_name']}</span>
                 <span class="badge badge-{tier_color}" style="margin-left:6px;">Tier {s['tier']}</span>
-                <span style="font-size:11px;color:#8b949e;margin-left:6px;">{s['city']}</span>
+                <span style="font-size:11px;color:#64748B;margin-left:6px;">{s['city']}</span>
                 <div style="margin-top:4px;">{risk_pills}</div>
             </div>
             """, unsafe_allow_html=True)
         with col_m:
             st.markdown(f"""
-            <div style="font-size:12px;color:#8b949e;">Available: <span style="color:#f0f6fc;">{int(s['total_available'])} units</span></div>
-            <div style="font-size:12px;color:#8b949e;">In Transit: <span style="color:#58a6ff;">{int(s['total_in_transit'])} units</span></div>
-            <div style="font-size:12px;color:#8b949e;">Velocity: <span style="color:#f0f6fc;">{s['avg_velocity']:.1f}/day</span></div>
+            <div style="font-size:12px;color:#64748B;">Available: <span style="color:#1B2B5E;">{int(s['total_available'])} units</span></div>
+            <div style="font-size:12px;color:#64748B;">In Transit: <span style="color:#2563EB;">{int(s['total_in_transit'])} units</span></div>
+            <div style="font-size:12px;color:#64748B;">Velocity: <span style="color:#1B2B5E;">{s['avg_velocity']:.1f}/day</span></div>
             """, unsafe_allow_html=True)
         with col_r:
             doh_display = f"{doh:.0f}d" if doh < 999 else "No sales"
             st.markdown(f"""
             <div style="font-size:22px;font-weight:700;color:{doh_color};font-family:'DM Mono',monospace;text-align:right;">{doh_display}</div>
-            <div style="font-size:11px;color:#8b949e;text-align:right;">avg days on hand</div>
+            <div style="font-size:11px;color:#64748B;text-align:right;">avg days on hand</div>
             """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height:2px;background:#1e2130;margin:8px 0;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:2px;background:#E2E8F0;margin:8px 0;'></div>", unsafe_allow_html=True)
 
     # ── ACTION HISTORY ────────────────────────────────────────────────────────
     st.markdown("<div class='section-header'>Action History · This Session</div>", unsafe_allow_html=True)
@@ -205,12 +205,12 @@ def render(data):
                 status = "✅ Approved" if action_key in st.session_state.approved_actions else (
                     "✗ Rejected" if action_key in st.session_state.rejected_actions else "⏳ Pending"
                 )
-                status_color = "#3fb950" if "Approved" in status else ("#8b949e" if "Rejected" in status else "#e3b341")
+                status_color = "#16A34A" if "Approved" in status else ("#64748B" if "Rejected" in status else "#F47920")
                 st.markdown(f"""
-                <div style="display:flex;justify-content:space-between;padding:8px 12px;border:1px solid #1e2130;border-radius:6px;margin-bottom:6px;">
-                    <div style="font-size:12px;color:#c9d1d9;">Size {row['size']} · {row['store_name']} · {row.get('action_detail','—')}</div>
+                <div style="display:flex;justify-content:space-between;padding:8px 12px;border:1px solid #E2E8F0;border-radius:6px;margin-bottom:6px;">
+                    <div style="font-size:12px;color:#475569;">Size {row['size']} · {row['store_name']} · {row.get('action_detail','—')}</div>
                     <div style="font-size:12px;font-weight:600;color:{status_color};">{status}</div>
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.markdown('<div style="font-size:12px;color:#8b949e;">No actions generated for this SKU.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size:12px;color:#64748B;">No actions generated for this SKU.</div>', unsafe_allow_html=True)
