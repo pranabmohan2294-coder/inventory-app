@@ -1,132 +1,205 @@
 import streamlit as st
 import pandas as pd
 
-def show(signals, actions, inv):
+ACTION_LABELS = {
+    "transfer_store": "🔄 Transfer",
+    "replenish": "📦 Replenish",
+    "markdown": "🏷️ Markdown",
+    "wait": "⏳ Wait",
+    "investigate": "🔎 Investigate",
+    "hold_qc": "🔒 QC Hold",
+    "monitor": "👁️ Monitor",
+}
+
+RISK_LABELS = {
+    "stockout": "Stockout",
+    "stockout_warning": "At Risk",
+    "size_gap": "Size Gap",
+    "overstock": "Overstock",
+    "dead_stock": "Dead Stock",
+    "velocity_anomaly": "Velocity Spike",
+    "returns_spike": "Returns Spike",
+    "data_gap": "Data Gap",
+}
+
+
+def render(data):
+    actions_df = data["actions_df"]
+    summary    = data["summary"]
+
     st.markdown("""
-    <div class="ginesys-header">
-        <div><h1>⚡ Action Feed</h1>
-        <span>Full prioritised action list · Approve, modify or reject</span></div>
-    </div>
+    <div class="page-title">Action Feed</div>
+    <div class="page-subtitle">All prioritised recommendations · Approve, modify or reject</div>
     """, unsafe_allow_html=True)
 
-    # Filters
-    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-    with col_f1:
-        risk_filter = st.selectbox("Risk Type", ["All", "stockout", "size_gap", "imbalance", "overstock", "dead_stock"])
-    with col_f2:
-        action_filter = st.selectbox("Action Type", ["All", "TRANSFER", "REPLENISH", "MARKDOWN", "WAIT"])
-    with col_f3:
-        conf_filter = st.selectbox("Confidence", ["All", "High", "Medium", "Low"])
-    with col_f4:
-        status_filter = st.selectbox("Status", ["All", "Pending", "Approved", "Rejected"])
+    if actions_df is None or actions_df.empty:
+        st.info("No actions generated. Network looks healthy!")
+        return
 
-    filtered_actions = actions[:]
+    # ── STATS ROW ─────────────────────────────────────────────────────────────
+    total    = len(actions_df)
+    critical = len(actions_df[actions_df["risk_severity"] == "critical"])
+    approved = len(st.session_state.approved_actions)
+    rejected = len(st.session_state.rejected_actions)
+    pending  = total - approved - rejected
+
+    c1, c2, c3, c4 = st.columns(4)
+    for col, label, val, color in [
+        (c1, "Total Actions", total, "#8b949e"),
+        (c2, "Critical", critical, "#f85149"),
+        (c3, "Approved", approved, "#3fb950"),
+        (c4, "Pending", pending, "#e3b341"),
+    ]:
+        with col:
+            st.markdown(f"""
+            <div class="kpi-card" style="padding:14px 18px;">
+                <div class="kpi-label">{label}</div>
+                <div class="kpi-value" style="font-size:26px;color:{color};">{val}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    # ── FILTERS ───────────────────────────────────────────────────────────────
+    filt_col1, filt_col2, filt_col3, filt_col4 = st.columns([2, 2, 2, 2])
+
+    with filt_col1:
+        risk_opts = ["All"] + sorted(actions_df["risk_type"].unique().tolist())
+        risk_filter = st.selectbox("Risk Type", risk_opts, key="af_risk")
+    with filt_col2:
+        store_opts = ["All"] + sorted(actions_df["store_name"].unique().tolist())
+        store_filter = st.selectbox("Store", store_opts, key="af_store")
+    with filt_col3:
+        cat_opts = ["All"] + sorted(actions_df["category"].unique().tolist())
+        cat_filter = st.selectbox("Category", cat_opts, key="af_cat")
+    with filt_col4:
+        status_filter = st.selectbox("Status", ["All", "Pending", "Approved", "Rejected"], key="af_status")
+
+    # Apply filters
+    df = actions_df.copy()
     if risk_filter != "All":
-        filtered_actions = [a for a in filtered_actions if a.risk_type == risk_filter]
-    if action_filter != "All":
-        filtered_actions = [a for a in filtered_actions if a.action_type == action_filter]
-    if conf_filter != "All":
-        filtered_actions = [a for a in filtered_actions if a.confidence == conf_filter]
-    if status_filter != "All":
-        filtered_actions = [a for a in filtered_actions if
-                            st.session_state.action_states.get(a.action_id, "Pending") == status_filter]
+        df = df[df["risk_type"] == risk_filter]
+    if store_filter != "All":
+        df = df[df["store_name"] == store_filter]
+    if cat_filter != "All":
+        df = df[df["category"] == cat_filter]
 
-    pending = [a for a in filtered_actions if st.session_state.action_states.get(a.action_id, "Pending") == "Pending"]
-    approved = [a for a in filtered_actions if st.session_state.action_states.get(a.action_id, "Pending") == "Approved"]
-    rejected = [a for a in filtered_actions if st.session_state.action_states.get(a.action_id, "Pending") == "Rejected"]
+    if status_filter == "Pending":
+        df = df[df.apply(lambda r: f"{r['sku_id']}_{r['size']}_{r['store_id']}" not in st.session_state.approved_actions
+                         and f"{r['sku_id']}_{r['size']}_{r['store_id']}" not in st.session_state.rejected_actions, axis=1)]
+    elif status_filter == "Approved":
+        df = df[df.apply(lambda r: f"{r['sku_id']}_{r['size']}_{r['store_id']}" in st.session_state.approved_actions, axis=1)]
+    elif status_filter == "Rejected":
+        df = df[df.apply(lambda r: f"{r['sku_id']}_{r['size']}_{r['store_id']}" in st.session_state.rejected_actions, axis=1)]
 
-    tab_pending, tab_approved, tab_rejected = st.tabs([
-        f"⏳ Pending ({len(pending)})",
-        f"✅ Approved ({len(approved)})",
-        f"❌ Rejected ({len(rejected)})"
-    ])
+    st.markdown(f"<div style='font-size:12px;color:#8b949e;margin:12px 0 8px 0;'>{len(df)} actions shown</div>", unsafe_allow_html=True)
 
-    def render_action_card(action, tab="pending"):
-        state = st.session_state.action_states.get(action.action_id, "Pending")
-        risk_colors = {
-            "stockout": "#FF4444", "size_gap": "#FFD700",
-            "imbalance": "#4488FF", "overstock": "#FF8C00", "dead_stock": "#888888",
-        }
-        risk_labels = {
-            "stockout": "🔴 Stockout", "size_gap": "🟡 Size Gap",
-            "imbalance": "🔵 Imbalance", "overstock": "🟠 Overstock", "dead_stock": "⚪ Dead Stock",
-        }
-        badge_map = {"TRANSFER": "badge-transfer", "MARKDOWN": "badge-markdown",
-                     "REPLENISH": "badge-replenish", "WAIT": "badge-wait"}
-        conf_map = {"High": "badge-high", "Medium": "badge-medium", "Low": "badge-low"}
-        risk_color = risk_colors.get(action.risk_type, "#F26522")
+    # ── ACTION CARDS ──────────────────────────────────────────────────────────
+    for idx, row in df.iterrows():
+        action_key = f"{row['sku_id']}_{row['size']}_{row['store_id']}"
+        is_approved = action_key in st.session_state.approved_actions
+        is_rejected = action_key in st.session_state.rejected_actions
 
-        with st.expander(f"[#{action.action_id}] {action.sku_name} · Size {action.size} · {action.action_type} → {action.to_location}", expanded=False):
-            col1, col2 = st.columns([2, 1])
-            with col1:
+        sev = row.get("risk_severity", "warning")
+        border_color = "#f85149" if sev == "critical" else "#e3b341"
+        if is_approved:
+            border_color = "#3fb950"
+        elif is_rejected:
+            border_color = "#484f58"
+
+        risk_label = RISK_LABELS.get(row["risk_type"], row["risk_type"])
+        action_label = ACTION_LABELS.get(row.get("recommended_action", ""), row.get("recommended_action", ""))
+
+        conf = row.get("confidence", "medium")
+        conf_color = {"high": "#3fb950", "medium": "#e3b341", "low": "#f85149"}.get(conf, "#8b949e")
+        conf_label = {"high": "High", "medium": "Med", "low": "Low"}.get(conf, conf)
+
+        prevented = f"₹{row.get('prevented_loss', 0):,.0f}" if row.get("prevented_loss", 0) > 0 else "—"
+        cost = f"₹{row.get('logistics_cost', 0):,.0f}" if row.get("logistics_cost", 0) > 0 else "₹0"
+        eta = f"{row.get('eta_days', '—')}d" if row.get("eta_days") is not None else "—"
+
+        event_tag = ' <span class="badge badge-amber">Event</span>' if row.get("event_imminent") else ""
+
+        with st.expander(
+            f"#{row.get('action_rank', idx+1)}  {row['sku_name']} · {row['size']} · {row['store_name']}  |  {risk_label}  →  {action_label}",
+            expanded=False
+        ):
+            st.markdown(f"""
+            <div style="border-left:3px solid {border_color};padding-left:16px;">
+            """, unsafe_allow_html=True)
+
+            # Detail grid
+            col_a, col_b, col_c = st.columns(3)
+            with col_a:
                 st.markdown(f"""
-                <div style="padding:8px 0">
-                    <span class="badge {badge_map.get(action.action_type,'badge-transfer')}">{action.action_type}</span>
-                    <span class="badge {conf_map.get(action.confidence,'badge-medium')}">{action.confidence} confidence</span>
-                    <span style="font-size:11px; color:{risk_color}; margin-left:6px;">{risk_labels.get(action.risk_type,'Risk')}</span>
+                <div style="font-size:11px;color:#8b949e;margin-bottom:2px;">FROM → TO</div>
+                <div style="font-size:13px;color:#f0f6fc;font-weight:600;">
+                    {row.get('from_location', '—')} → {row.get('to_location', '—')}
                 </div>
-                <table style="width:100%; color:#E8EDF5; font-size:13px; border-collapse:collapse;">
-                    <tr><td style="color:#8A9BC0; padding:3px 8px 3px 0">From</td><td>{action.from_location}</td></tr>
-                    <tr><td style="color:#8A9BC0; padding:3px 8px 3px 0">To</td><td>{action.to_location}</td></tr>
-                    <tr><td style="color:#8A9BC0; padding:3px 8px 3px 0">Quantity</td><td>{action.quantity} units</td></tr>
-                    <tr><td style="color:#8A9BC0; padding:3px 8px 3px 0">Mode</td><td>{action.mode} · ETA {action.eta_days}d</td></tr>
-                    <tr><td style="color:#8A9BC0; padding:3px 8px 3px 0">Cost</td><td>₹{int(action.cost_inr):,}</td></tr>
-                    <tr><td style="color:#8A9BC0; padding:3px 8px 3px 0">Prevented Loss</td><td style="color:#22C55E">₹{int(action.prevented_loss_inr):,}</td></tr>
-                    <tr><td style="color:#8A9BC0; padding:3px 8px 3px 0">Priority Score</td><td style="color:{risk_color}">{action.priority_score:.2f}</td></tr>
-                </table>
-                <div style="margin-top:10px; padding:8px; background:#0A1628; border-radius:6px; font-size:12px; color:#8A9BC0;">
-                    💡 {action.notes}
+                <div style="font-size:11px;color:#8b949e;margin-top:8px;">Quantity</div>
+                <div style="font-size:13px;color:#f0f6fc;">{row.get('transfer_qty', 0)} units · {row.get('mode', '—')} · ETA {eta}</div>
+                """, unsafe_allow_html=True)
+            with col_b:
+                st.markdown(f"""
+                <div style="font-size:11px;color:#8b949e;margin-bottom:2px;">FINANCIALS</div>
+                <div style="font-size:13px;color:#3fb950;font-weight:600;">Save: {prevented}</div>
+                <div style="font-size:11px;color:#8b949e;margin-top:4px;">Cost: {cost}</div>
+                <div style="font-size:11px;color:#8b949e;">DOH: {row.get('current_doh', '—')}d current</div>
+                """, unsafe_allow_html=True)
+            with col_c:
+                st.markdown(f"""
+                <div style="font-size:11px;color:#8b949e;margin-bottom:2px;">SIGNALS</div>
+                <div style="font-size:12px;color:{conf_color};font-weight:600;">Confidence: {conf_label}</div>
+                <div style="font-size:11px;color:#8b949e;margin-top:4px;">Priority: {row.get('priority_score', 0):.0f}/100</div>
+                <div style="font-size:11px;color:#8b949e;">Velocity: {row.get('daily_velocity', 0):.1f} units/day</div>
+                """, unsafe_allow_html=True)
+
+            st.markdown(f"""
+            <div style="background:#0d1117;border-radius:6px;padding:10px 14px;margin:12px 0;font-size:12px;color:#c9d1d9;border:1px solid #1e2130;">
+                💡 <strong>Why:</strong> {row.get('reason', '—')}
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Transfer vs Markdown comparison for overstock
+            if row.get("recommended_action") == "markdown" and row.get("effective_stock", 0) > 0:
+                st.markdown(f"""
+                <div style="background:#0d1117;border-radius:6px;padding:12px;margin-bottom:12px;border:1px solid #1e2130;">
+                    <div style="font-size:11px;font-weight:700;color:#8b949e;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;">Markdown vs Hold Comparison</div>
+                    <div style="display:flex;gap:24px;font-size:12px;">
+                        <div>
+                            <div style="color:#e3b341;font-weight:600;">30% Markdown Now</div>
+                            <div style="color:#8b949e;margin-top:4px;">Revenue: ₹{row.get('effective_stock',0) * row.get('mrp',0) * 0.7:,.0f}</div>
+                            <div style="color:#f85149;">Loss: ₹{row.get('markdown_loss',0):,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="color:#f85149;font-weight:600;">Hold (risk)</div>
+                            <div style="color:#8b949e;margin-top:4px;">Capital tied: ₹{row.get('effective_stock',0) * row.get('mrp',0):,.0f}</div>
+                            <div style="color:#f85149;">Aging cost grows daily</div>
+                        </div>
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            with col2:
-                if action.action_type == "TRANSFER" and action.cost_inr > 0:
-                    st.markdown("**Transfer vs Markdown**")
-                    roi = action.prevented_loss_inr / max(action.cost_inr, 1)
-                    st.markdown(f"""
-                    <div style="background:#0A1628; border-radius:6px; padding:10px; font-size:12px;">
-                        <div style="color:#4488FF">Transfer</div>
-                        <div>Cost: ₹{int(action.cost_inr):,}</div>
-                        <div>ROI: {roi:.1f}x</div>
-                        <div style="color:#F26522; margin-top:8px">Markdown (alt)</div>
-                        <div>Revenue: ₹{int(action.prevented_loss_inr * 0.7):,}</div>
-                        <div>Discount: 20%</div>
-                        <div style="margin-top:8px; color:{'#22C55E' if roi > 1.5 else '#F26522'}">
-                        {'✅ Transfer preferred' if roi > 1.5 else '⚠️ Consider markdown'}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
-            if state == "Pending":
-                b1, b2 = st.columns(2)
-                with b1:
-                    if st.button("✅ Approve", key=f"af_app_{action.action_id}_{tab}"):
-                        st.session_state.action_states[action.action_id] = "Approved"
-                        st.rerun()
-                with b2:
-                    if st.button("❌ Reject", key=f"af_rej_{action.action_id}_{tab}"):
-                        st.session_state.action_states[action.action_id] = "Rejected"
-                        st.rerun()
+            # Action buttons
+            if is_approved:
+                st.success("✅ Approved — action logged")
+                if st.button("↩ Undo", key=f"undo_{action_key}_{idx}"):
+                    st.session_state.approved_actions.discard(action_key)
+                    st.rerun()
+            elif is_rejected:
+                st.warning("✗ Rejected")
+                if st.button("↩ Undo", key=f"undo_rej_{action_key}_{idx}"):
+                    st.session_state.rejected_actions.discard(action_key)
+                    st.rerun()
             else:
-                st.markdown(f"**Status:** {state}")
-
-    with tab_pending:
-        if not pending:
-            st.success("No pending actions in this filter.")
-        for action in pending:
-            render_action_card(action, "pending")
-
-    with tab_approved:
-        if not approved:
-            st.info("No approved actions yet.")
-        for action in approved:
-            render_action_card(action, "approved")
-
-    with tab_rejected:
-        if not rejected:
-            st.info("No rejected actions.")
-        for action in rejected:
-            render_action_card(action, "rejected")
-
-def render(data):
-    show(data)
+                btn1, btn2, btn3 = st.columns([1.5, 1.5, 6])
+                with btn1:
+                    if st.button("✓ Approve", key=f"approve_{action_key}_{idx}", type="primary"):
+                        st.session_state.approved_actions.add(action_key)
+                        st.rerun()
+                with btn2:
+                    if st.button("✗ Reject", key=f"reject_{action_key}_{idx}"):
+                        st.session_state.rejected_actions.add(action_key)
+                        st.rerun()
